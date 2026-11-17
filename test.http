@@ -1,0 +1,103 @@
+@baseUrl = http://localhost:3000
+
+### 1. Перевірка здоров'я сервера (очікується 200 OK)
+GET {{baseUrl}}/health
+
+### 2. Реєстрація першого користувача - User A (очікується 201 Created)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "userA@example.com",
+  "password": "StrongPassword123!"
+}
+
+### 3. Повторна реєстрація того ж email - негативний тест (очікується 409 EMAIL_EXISTS)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "userA@example.com",
+  "password": "StrongPassword123!"
+}
+
+### 4. Реєстрація другого користувача - User B (очікується 201 Created)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "userB@example.com",
+  "password": "AnotherPassword123!"
+}
+
+### 5. Вхід User A та збереження його токена (очікується 200 OK)
+# @name loginA
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "userA@example.com",
+  "password": "StrongPassword123!"
+}
+
+### 6. Вхід User B та збереження його токена (очікується 200 OK)
+# @name loginB
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "userB@example.com",
+  "password": "AnotherPassword123!"
+}
+
+###
+@tokenA = {{loginA.response.body.data.accessToken}}
+@tokenB = {{loginB.response.body.data.accessToken}}
+
+### 7. Спроба отримати завдання без токена (очікується 401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/tasks
+
+### 8. Спроба передати зайве поле ownerId (очікується 400 VALIDATION_ERROR)
+POST {{baseUrl}}/api/tasks
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "title": "Зламати чужий ID",
+  "ownerId": "fake-user-id"
+}
+
+### 9. Створення завдання від User A (очікується 201 Created)
+# @name createTask
+POST {{baseUrl}}/api/tasks
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "title": "Здати практичну роботу №7",
+  "description": "Перевірити роботу JWT та захисту від IDOR"
+}
+
+###
+@taskId = {{createTask.response.body.data.id}}
+
+### 10. Отримання списку своїх завдань User A (очікується 200 OK)
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{tokenA}}
+
+### 11. Тест на IDOR: User B намагається прочитати завдання User A (очікується 404 TASK_NOT_FOUND)
+GET {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{tokenB}}
+
+### 12. Оновлення завдання власником User A (очікується 200 OK)
+PATCH {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "status": "done"
+}
+
+### 13. Видалення завдання власником User A (очікується 204 No Content)
+DELETE {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{tokenA}}
